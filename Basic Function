@@ -1,0 +1,546 @@
+#include <cstring>                              // for strcpy(), strcat()
+#include <io.h>
+#include<stdio.h>
+#include<malloc.h>
+//#include"findallfile.h"
+#include<direct.h>
+#define word 200
+#define pathlong 200
+#define Max 3000000//文件数量
+#define frequecy_count 10000
+
+int linenumber = 0, wordnum = 0;
+int FileSearch(char dir[]);
+int Write(void);
+int filenumber = -1;
+
+typedef struct Data {
+	unsigned long size;
+	char dir[500];
+}Data;
+Data data[Max];
+typedef struct _NODE
+{
+	char danci[word] = { 0 };
+	int frequency = 0;
+	struct _NODE* next = NULL;
+}NODE;
+
+typedef struct _HASH_TABLE
+{
+	NODE* value[17576] = { NULL };
+}HASH_TABLE;
+HASH_TABLE*pHashTbl;
+HASH_TABLE* create_hash_table()
+{
+	HASH_TABLE* pHashTbl = (HASH_TABLE*)malloc(sizeof(HASH_TABLE));
+	memset(pHashTbl, 0, sizeof(HASH_TABLE));
+	return pHashTbl;
+}
+
+int insert_data_into_hash(HASH_TABLE* pHashTbl, int data, int wordlength, char danci[])
+{
+	NODE* pNode;
+	if (NULL == pHashTbl)
+		return -1;
+	//printf("you get in insert function\n");
+	if (NULL == pHashTbl->value[data]) {
+		pNode = (NODE*)malloc(sizeof(NODE));
+		memset(pNode, 0, sizeof(NODE));
+		strcpy_s(pNode->danci, strlen(danci) + 1, danci);
+		pNode->frequency = 1;
+		pNode->next = NULL;
+		pHashTbl->value[data] = pNode;
+		return 1;
+	}
+
+	//if (NULL != find_data_in_hash(pHashTbl, data))
+	//	return -1;
+
+	pNode = pHashTbl->value[data];
+	while (NULL != pNode->next)
+		pNode = pNode->next;
+
+	pNode->next = (NODE*)malloc(sizeof(NODE));
+	memset(pNode->next, 0, sizeof(NODE));
+	strcpy_s(pNode->next->danci, strlen(danci) + 1,danci);
+	pNode->next->frequency = 1;
+	pNode->next->next = NULL;
+	pNode = pNode->next;
+	//printf("\n insert pnode is %s  pnode next is %s", pNode->danci, pNode->next->danci);
+	return 1;
+}
+
+
+int find_data_in_hash(HASH_TABLE* pHashTbl, int data, int wordlength, char danci[])
+{
+	NODE* pNode;
+	int j, flagend = 0, insertornot = 0;
+	if (NULL == pHashTbl)
+		return -1;
+	//printf("you get in find function\n  wordlength is %d", wordlength);
+	if (NULL == (pNode = pHashTbl->value[data]))
+	{
+		insertornot = insert_data_into_hash(pHashTbl, data, wordlength, danci);
+		if (insertornot == -1)
+			printf("insert error");
+		return 1;
+	}
+	while (pNode) {
+		//printf("not NULL already has\n");
+		for (j = wordlength - 1; j >= 0; j--) {  //此版本不论末尾是什么，从尾至头取到字母，再比较
+			if ((danci[j] <= 122 && danci[j] >= 97) || (danci[j] <= 90 && danci[j] >= 65))
+			{
+				flagend = j;
+				break;
+			}
+
+		}
+		//printf("temp flag i %d", flagend);
+		for (j = word - 1; j > 0; j--) {
+			if ((pNode->danci[j] <= 122 && pNode->danci[j] >= 97) || (pNode->danci[j] <= 90 && pNode->danci[j] >= 65))
+			{
+				if (flagend < j)
+				{
+					flagend = j;
+					break;
+				}
+			}
+		}
+		//printf("flaaagggggg  %d", flagend);
+		if (_strnicmp(pNode->danci, danci, flagend + 1) == 0)
+		{
+			pNode->frequency++;
+			if (strcmp(pNode->danci, danci) > 0)
+				strcpy_s(pNode->danci,strlen(danci)+1, danci);
+			//printf("same words found!!!");
+			return 1;
+		}
+		else if(pNode->next==NULL)
+		{
+			insertornot = insert_data_into_hash(pHashTbl, data, wordlength, danci);
+			if (insertornot == -1)
+				printf("insert error");
+			return 1;
+		}
+		//printf("\n\n\n pnode :%s", pNode->danci);
+		pNode = pNode->next;
+		//printf("\n\n\n pnode :%s", pNode->danci);
+	}
+	return 1;
+
+}
+int WriteAllFile(void)//将获得的目录栈写到本地文件
+{
+	FILE*fp;
+	errno_t err;
+	if ((err = fopen_s(&fp, "dir.txt", "w")) != 0)
+		return -1;
+	//fprintf(fp, "Total files is %d\n\n", i + 1);
+	while (filenumber > -1)
+	{
+		fprintf(fp, "%s\n", data[filenumber].dir);
+		filenumber--;
+	}
+	fclose(fp);
+}
+
+
+int FileSearch(char dir[])//递归遍历当前目录下的所有文件
+{
+	long handle;
+	_finddata_t findData;
+	char dirNew[500];
+	strcpy_s(dirNew, dir);
+	strcat_s(dirNew, "\\*.*");
+	if ((handle = _findfirst(dirNew, &findData)) == -1L)
+	{
+		printf("Failed to findfrist file");
+		return -1;
+	}
+	while (_findnext(handle, &findData) == 0)
+	{
+		if (findData.attrib & _A_SUBDIR)
+		{
+			if (strcmp(findData.name, ".") == 0 || strcmp(findData.name, "..") == 0)
+				continue;
+			strcpy_s(dirNew, dir);
+			strcat_s(dirNew, "\\");
+			strcat_s(dirNew, findData.name);
+
+			FileSearch(dirNew);
+
+		}
+		else
+		{
+			if (++filenumber < Max)//将路径入栈
+			{
+				strcpy_s(data[filenumber].dir, dir);
+				strcat_s(data[filenumber].dir, "\\");
+				strcat_s(data[filenumber].dir, findData.name);
+				data[filenumber].size = findData.size;
+			}
+		}
+	}
+	_findclose(handle);
+}
+
+
+
+
+
+int count(FILE*fp, HASH_TABLE*pHashTbl) {                             //linenumber用于统计换行符号个数charnumber统计字符数
+
+	char  ch, temp[word] = {0};
+	
+	int charnumber = 0, i = 0, j = 0, flag = 0,shiwei=0,gewei=0,data=0,wordlength=0,findornot,baiwei=0;
+	charnumber = 0;
+	
+	while (!feof(fp))
+	{
+
+		ch = fgetc(fp);
+		if (ch <= 127 && ch > 0)               //只统计ASCII符号
+		{
+			if ((ch >= 48 && ch <= 57) || (ch >= 97 && ch <= 122) || (ch >= 65 && ch <= 90))//字母和数字
+			{
+				temp[i++] = ch;
+
+				
+				 //flag = 1;                   //flag用于防止连续的分割符出现导致i++，形成空的word【i】
+				charnumber++;                //舍弃结构体存储后，flag用于保证每个类单词之间只有一个$
+			}
+			else
+			{
+				if (ch == '\n')
+					linenumber++;
+				else
+					charnumber++;
+				if (i<4 || (temp[0] <= 57 && temp[0] >= 48) || (temp[1] <= 57 && temp[1] >= 48) || (temp[2] <= 57 && temp[2] >= 48) || (temp[3] <= 57 && temp[3] >= 48))
+				{
+					for (j = 0; j < word; j++) //将temp数组清零
+						temp[j] = '\0';
+					i = 0;
+				}
+				else {
+					if (temp[0] <= 90 && temp[0] >= 65)
+						baiwei = temp[0] + 32;
+					else
+						baiwei = temp[0];
+					if (temp[1] <= 90 && temp[1] >= 65)
+						shiwei = temp[1] + 32;
+					else
+						shiwei = temp[1];
+					if (temp[2] <= 90 && temp[2] >= 65)
+						gewei = temp[2] + 32;
+					else
+						gewei = temp[2];
+					//printf("temp is %s \n", temp);
+					data = (baiwei - 97) * 676+ (shiwei - 97)*26+gewei-97;
+					//printf("data is %d\n", data);
+					wordlength = i;
+					findornot = find_data_in_hash(pHashTbl, data, wordlength, temp);
+					if (findornot == -1)
+						printf("hash is empty");
+					//else
+						//printf("get out of find function\n");
+					for (j = 0; j < word; j++)
+						temp[j] = '\0';
+					i = 0;
+				}
+			}
+		}
+
+	}
+	if (i >= 4)
+	{
+		//printf("lost temp");
+		if (temp[0] <= 90 && temp[0] >= 65)
+			baiwei = temp[0] + 32;
+		else
+			baiwei = temp[0];
+		if (temp[1] <= 90 && temp[1] >= 65)
+			shiwei = temp[1] + 32;
+		else
+			shiwei = temp[1];
+		if (temp[2] <= 90 && temp[2] >= 65)
+			gewei = temp[2] + 32;
+		else
+			gewei = temp[2];
+		//printf("temp is %s \n", temp);
+		data = (baiwei - 97) * 676 + (shiwei - 97) * 26 + gewei-97;
+		//printf("data is %d\n", data);
+		wordlength = i;
+		findornot = find_data_in_hash(pHashTbl, data, wordlength, temp);
+		if (findornot == -1)
+			printf("hash is empty");
+		//else
+			//printf("get out of find function\n");
+		for (j = 0; j < word; j++)
+			temp[j] = '\0';
+	}
+	
+	
+	
+
+	/*for (i = 0; i < wordnum; i++) {
+		for (j = 0; j < word; j++)
+		{
+			printf("%c", realword[i].content[j]);
+		}
+		printf("\n");
+	}*/
+
+	//printf("%d", _strnicmp(test1, test2,4));
+	//printf("total char is %d,line number is %d\n\n", charnumber, linenumber);
+	return charnumber;
+}
+
+
+int partition(int arr[], int low, int high) {
+	int key;
+	key = arr[low];
+	while (low<high) {
+		while (low <high && arr[high] >=key)
+			high--;
+		if (low<high)
+			arr[low++] = arr[high];
+		while (low<high && arr[low] <=key)
+			low++;
+		if (low<high)
+			arr[high--] = arr[low];
+	}
+	arr[low] = key;
+
+	return low;
+}
+
+void quick_sort(int arr[], int start, int end) { 
+	int pos;
+	if (start<end) {
+		//printf("start quick sort\n");
+		pos = partition(arr, start, end);
+		quick_sort(arr, start, pos - 1);
+		quick_sort(arr, pos + 1, end);
+	}
+
+	return;
+}
+
+void printTOP10(HASH_TABLE*pHashTbl,int frequency_value,FILE*fp_result) {
+	
+	int j = 0;
+	NODE * pNode = NULL;
+	char TOPword[word] = { 0 };
+	for (j = 0; j < 17576; j++) {
+		if (pHashTbl->value[j] != NULL) {
+			pNode = pHashTbl->value[j];
+			while (pNode != NULL) {
+				if (pNode->frequency == frequency_value) {
+					if (TOPword[0] == '\0')
+						strcpy_s(TOPword,pNode->danci);
+	
+				    else if (strcmp(TOPword, pNode->danci) > 0)
+						strcpy_s(TOPword, pNode->danci);
+				}
+				pNode = pNode->next;
+			}
+		}
+	}
+	fprintf(fp_result, "%s   %d\n", TOPword, frequency_value);
+	printf("TOPword danci is %s  frequecy is %d\n\n", TOPword, frequency_value);
+}
+int main(int argc, char *argv[])
+{
+	errno_t err_fpopen, err_fp,err_result;
+	char dir[500] = { 0 };                           //要读取的初始路径
+	char buffer[100];                //用于存放当前目录路径
+	int i = 0, charnumber = 0, j = 0, m = 0, Fileornot = 0,k=0;    //用于循环
+	int frequecy[frequecy_count] = {0};
+	int filenum = 0, total_charnumber = 0, total_word = 0;            //用于记录，filenumber变量会在WriteAllFile后变为-1
+	FILE *fp_dir, *fp_test, *fp_single,*fp_result;              //用于打开dir.txt，其中存放了文件夹下所有文件名字
+	char file_path[pathlong] = { 0 };                     //用于存放dir.txt中每一行所代表的文件路径
+	char file_path_new[pathlong] = { 0 };
+	char file_path_test[pathlong] = { 0 };
+	
+	pHashTbl = create_hash_table();
+	NODE * nodeprint,*nodecount;
+	//printf("%d", argc);
+	strcpy_s(dir, argv[1]);
+
+	Fileornot = FileSearch(dir);
+
+	if (Fileornot == -1) {                        //-1说明输入路径是一个文档而非文件夹
+
+		fp_single = fopen(dir, "r");
+		if (fp_single == NULL)
+			printf("fail to open the file\n");
+		else
+			printf("open success");
+		charnumber = count(fp_single,pHashTbl);
+		if (charnumber != 0)
+			linenumber++;
+		total_charnumber = charnumber;
+		printf("total char is %d  total line is%d ", charnumber, linenumber);
+		
+
+	}
+
+
+	else {
+		printf("Total files is %d\n\n", filenumber + 1);
+		filenum = filenumber + 1;
+
+		WriteAllFile();
+		printf("done!\n");
+		_getcwd(buffer, sizeof(buffer));                 //获取当前路径
+		strcat_s(buffer, "\\dir.txt");                   //拼接完整路径
+														 //printf("%s", buffer);
+		if ((err_fp = fopen_s(&fp_dir, buffer, "r+")) != 0)
+			printf("fail to open dir.txt");             //打开dir.txt
+
+		for (i = 0; i < filenum; i++)
+		{
+
+			fgets(file_path, sizeof(file_path), fp_dir);//读取dir.txt中的每一行路径
+														//printf("%s\n\n", file_path);
+
+			for (j = 0; j < pathlong; j++) {
+				if (file_path[j] == '\n')                 //由于file_path中有奇怪的乱码，以此赋值给file_path_new保证干净
+				{
+
+					break;
+				}
+				else
+				{
+					file_path_new[j] = file_path[j];
+
+				}
+			}
+			/*printf("\n");
+			printf("new path:\n");  //测试filenew是否干净
+			for (j = 0; j < 150; j++) {
+			printf("%c", file_path_new[j]);
+			}*/
+
+
+
+
+
+
+
+			strcpy_s(file_path_test, file_path_new);
+			for (j = 0, m = 0; j < pathlong; j++)
+			{	                                                      /*扩展成双斜杠*/
+				if (file_path_new[j] == '\\')
+				{
+					file_path_test[m++] = '\\';
+					file_path_test[m++] = file_path_new[j];
+				}
+
+				else
+					file_path_test[m++] = file_path_new[j];
+			}
+
+			printf("finalpath is %s  \n", file_path_new);
+
+
+
+			fp_test = fopen(file_path_test, "r+");                     //打开成功返回0
+			if (fp_test == NULL) {
+
+				printf("open file failed");
+
+
+			}
+
+			charnumber = count(fp_test,pHashTbl);   
+			if (charnumber != 0)
+				linenumber++;//统计处理
+			total_charnumber = total_charnumber + charnumber;
+
+
+			fclose(fp_test);
+			for (j = 0; j < pathlong; j++) {                                 //对三个数组进行清空处理，避免出现路径不正确导致崩溃
+				file_path[j] = '\0';
+				file_path_new[j] = '\0';
+				file_path_test[j] = '\0';
+			}
+
+		}
+		//printf("\nfinal char number=%d  final line number=%d final word number=%d\n", total_charnumber, linenumber,wordnum);
+
+		/*for (j = 0;word[j].app_count!=0; j++) {
+		printf("file word : %s\n", word[j].content);
+		}
+		printf("likeword number is %d", wordnum);*/
+		
+
+
+	}
+	for (j = 0; j < 17576; j++) {
+		if (pHashTbl->value[j] != NULL)
+		{
+			nodeprint = pHashTbl->value[j];
+			while (nodeprint != NULL)
+			{
+
+				printf("we have word %s conut is %d\n", nodeprint->danci, nodeprint->frequency);
+				total_word = total_word + nodeprint->frequency;
+				nodeprint = nodeprint->next;
+			}
+
+		}
+
+	}
+
+for (j = 0; j < 17576; j++) {
+		if (pHashTbl->value[j] != NULL) {
+			nodecount = pHashTbl->value[j];
+			while (nodecount != NULL) {
+				for (m = 0; m < frequecy_count; m++)
+					if (nodecount->frequency == frequecy[m])
+						break;
+				if (m == frequecy_count)
+					frequecy[k++] = nodecount->frequency;
+				nodecount = nodecount->next;
+			}
+		}
+	}
+
+   
+	//for (m = 0; m < k; m++)
+	//	printf("frequecy is %d \n ", frequecy[m]);
+	quick_sort(frequecy, 0, k-1);
+	printf("how many frequecy? %d\n", k);
+	//for (m = 0; m < k; m++)
+	//	printf("frequecy is %d \n ", frequecy[m]);
+	err_result = fopen_s(&fp_result, "result.txt", "w");
+	if (err_result != 0)
+		printf("open result.txt failed\n");
+	fprintf(fp_result, "char_number :%d\n", total_charnumber);
+	fprintf(fp_result, "line_number :%d\n", linenumber);
+	fprintf(fp_result, "word_number :%d\n", total_word);
+	if (k != 0)
+	{
+		for (j = k - 1; j > k - 11 &&j >=0; j--)
+		{
+
+			printTOP10(pHashTbl, frequecy[j], fp_result);
+
+		}
+		
+	}
+	fclose(fp_result);
+
+
+
+
+	
+
+	
+	printf("total char is %d,line number is %d total word is %d\n\n", total_charnumber, linenumber, total_word);
+	getchar();
+	return 0;
+}
+
