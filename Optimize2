@@ -1,0 +1,858 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <cstring>                              // for strcpy(), strcat()
+#include <io.h>
+#include<stdio.h>
+#include<malloc.h>
+//#include"findallfile.h"
+#include<direct.h>
+#define word 300
+#define pathlong 200
+#define Max 3000000//文件数量
+#define frequecy_count 10000
+#define hash_size 456976
+int linenumber = 0, wordnum = 0;
+int FileSearch(char dir[]);
+int Write(void);
+int filenumber = -1;
+
+typedef struct Data {
+	unsigned long size;
+	char dir[500];
+}Data;
+Data data[Max];
+
+typedef struct _NODE
+{
+	char danci[word] = { 0 };
+	int frequency = 0;
+	struct _NODE* next = NULL;
+}NODE;
+
+typedef struct _HASH_TABLE
+{
+	NODE* value[hash_size] = { NULL };
+}HASH_TABLE;
+
+HASH_TABLE*pHashTbl;
+
+HASH_TABLE*pHashTbl_group;
+
+HASH_TABLE* create_hash_table()
+{
+	HASH_TABLE* pHashTbl = (HASH_TABLE*)malloc(sizeof(HASH_TABLE));
+	memset(pHashTbl, 0, sizeof(HASH_TABLE));
+	return pHashTbl;
+}
+
+int insert_data_into_hash(HASH_TABLE* pHashTbl, int data, int wordlength, char danci[])
+{
+	NODE* pNode;
+	if (NULL == pHashTbl)
+		return -1;
+	if (NULL == pHashTbl->value[data]) {
+		pNode = (NODE*)malloc(sizeof(NODE));
+		memset(pNode, 0, sizeof(NODE));
+		strcpy_s(pNode->danci, strlen(danci) + 1, danci);
+		pNode->frequency = 1;
+		pNode->next = NULL;
+		pHashTbl->value[data] = pNode;
+		return 1;
+	}
+
+	pNode = pHashTbl->value[data];
+	while (NULL != pNode->next)
+		pNode = pNode->next;
+
+	pNode->next = (NODE*)malloc(sizeof(NODE));
+	memset(pNode->next, 0, sizeof(NODE));
+	strcpy_s(pNode->next->danci, strlen(danci) + 1, danci);
+	pNode->next->frequency = 1;
+	pNode->next->next = NULL;
+	pNode = pNode->next;
+	return 1;
+}
+
+
+int find_data_in_hash(HASH_TABLE* pHashTbl, int data, int wordlength, char danci[], char smallword[], int onlyfind)
+{
+	NODE* pNode;
+	int j, flagend = 0, insertornot = 0;
+
+	if (NULL == pHashTbl)
+		return -1;
+
+	if (NULL == (pNode = pHashTbl->value[data]))
+	{
+		insertornot = insert_data_into_hash(pHashTbl, data, wordlength, danci);
+		if (insertornot == -1)
+			printf("insert error");
+		return 1;
+	}
+
+	while (pNode) {
+
+		for (j = wordlength - 1; j >= 0; j--) {
+			if ((danci[j] <= 122 && danci[j] >= 97) || (danci[j] <= 90 && danci[j] >= 65))
+			{
+				flagend = j;
+				break;
+			}
+
+		}
+
+		for (j = word - 1; j > 0; j--) {
+			if ((pNode->danci[j] <= 122 && pNode->danci[j] >= 97) || (pNode->danci[j] <= 90 && pNode->danci[j] >= 65))
+			{
+				if (flagend < j)
+				{
+					flagend = j;
+					break;
+				}
+			}
+		}
+
+		if (_strnicmp(pNode->danci, danci, flagend + 1) == 0)
+		{
+			if (onlyfind != 1)
+			{
+				pNode->frequency++;
+
+			}
+			if (strcmp(pNode->danci, danci) > 0)
+				strcpy_s(pNode->danci, strlen(danci) + 1, danci);
+
+			strcpy_s(smallword, strlen(pNode->danci) + 1, pNode->danci);
+			return 2;
+		}
+		else if (pNode->next == NULL)
+		{
+			insertornot = insert_data_into_hash(pHashTbl, data, wordlength, danci);
+			if (insertornot == -1)
+				printf("insert error");
+			return 1;
+		}
+
+		pNode = pNode->next;
+
+	}
+	return 1;
+
+}
+
+
+int WriteAllFile(void)
+{
+	FILE*fp;
+	errno_t err;
+	if ((err = fopen_s(&fp, "dir.txt", "w")) != 0)
+		return -1;
+
+	while (filenumber > -1)
+	{
+		fprintf(fp, "%s\n", data[filenumber].dir);
+		filenumber--;
+	}
+	fclose(fp);
+}
+
+
+int FileSearch(char dir[])
+{
+	long handle;
+	_finddata_t findData;
+	char dirNew[500];
+	strcpy_s(dirNew, dir);
+	strcat_s(dirNew, "\\*.*");
+	if ((handle = _findfirst(dirNew, &findData)) == -1L)
+	{
+		printf("Failed to findfrist file");
+		return -1;
+	}
+	while (_findnext(handle, &findData) == 0)
+	{
+		if (findData.attrib & _A_SUBDIR)
+		{
+			if (strcmp(findData.name, ".") == 0 || strcmp(findData.name, "..") == 0)
+				continue;
+			strcpy_s(dirNew, dir);
+			strcat_s(dirNew, "\\");
+			strcat_s(dirNew, findData.name);
+
+			FileSearch(dirNew);
+
+		}
+		else
+		{
+			if (++filenumber < Max)
+			{
+				strcpy_s(data[filenumber].dir, dir);
+				strcat_s(data[filenumber].dir, "\\");
+				strcat_s(data[filenumber].dir, findData.name);
+				data[filenumber].size = findData.size;
+			}
+		}
+	}
+	_findclose(handle);
+}
+
+
+int insertgroup(HASH_TABLE* pHashTbl, int key, char group[])
+{
+	NODE* pNode;
+	if (NULL == pHashTbl)
+		return -1;
+
+	if (NULL == pHashTbl->value[key]) {
+		pNode = (NODE*)malloc(sizeof(NODE));
+		memset(pNode, 0, sizeof(NODE));
+		strcpy_s(pNode->danci, strlen(group) + 1, group);
+		pNode->frequency = 1;
+		pNode->next = NULL;
+		pHashTbl->value[key] = pNode;
+		return 1;
+	}
+
+
+
+	pNode = pHashTbl->value[key];
+	while (NULL != pNode->next)
+		pNode = pNode->next;
+
+	pNode->next = (NODE*)malloc(sizeof(NODE));
+	memset(pNode->next, 0, sizeof(NODE));
+	strcpy_s(pNode->next->danci, strlen(group) + 1, group);
+	pNode->next->frequency = 1;
+	pNode->next->next = NULL;
+	pNode = pNode->next;
+
+	return 1;
+}
+
+
+int findgroup(HASH_TABLE* pHashTbl_group, int key, char group[])
+{
+	NODE* pNode;
+	char smallword[word] = { 0 }, group_new[word] = { 0 };
+	int  flagend = 0, insertornot = 0, findornot = 0, data_record = 0;
+	int onlyfind = 1, data = 0, qianwei = 0, baiwei = 0, gewei = 0, shiwei = 0;
+	if (NULL == pHashTbl)
+		return -1;
+
+
+	if (NULL == (pNode = pHashTbl_group->value[key]))
+	{
+		insertornot = insertgroup(pHashTbl_group, key, group);
+		if (insertornot == -1)
+			printf("insert error");
+		return 1;
+	}
+	while (pNode) {
+
+		if (strcmp(pNode->danci, group) == 0)
+		{
+			pNode->frequency++;
+
+
+			return 2;
+		}
+		else if (pNode->next == NULL)
+		{
+			insertornot = insertgroup(pHashTbl_group, key, group);
+			if (insertornot == -1)
+				printf("insert error");
+			return 1;
+		}
+
+		pNode = pNode->next;
+
+	}
+	return 1;
+
+}
+
+
+
+int count(FILE*fp, HASH_TABLE*pHashTbl) {
+
+	char  ch, temp[word] = { 0 }, smallword[word] = { 0 };
+
+	int charnumber = 0, i = 0, j = 0, flag = 0;
+	int shiwei = 0, gewei = 0, data = 0, wordlength = 0, findornot, baiwei = 0, qianwei = 0;
+	charnumber = 0;
+
+	while (!feof(fp))
+	{
+
+		ch = fgetc(fp);
+		if (ch <= 127 && ch >0)
+		{
+			if ((ch >= 48 && ch <= 57) || (ch >= 97 && ch <= 122) || (ch >= 65 && ch <= 90))
+			{
+				temp[i++] = ch;
+				charnumber++;
+			}
+			else
+			{
+				if (ch == '\n')
+					linenumber++;
+				else
+					charnumber++;
+				if (i<4 || (temp[0] <= 57 && temp[0] >= 48) || (temp[1] <= 57 && temp[1] >= 48) || (temp[2] <= 57 && temp[2] >= 48) || (temp[3] <= 57 && temp[3] >= 48))
+				{
+					for (j = 0; j < word; j++)
+						temp[j] = '\0';
+					i = 0;
+				}
+				else {
+					if (temp[0] <= 90 && temp[0] >= 65)
+						qianwei = temp[0] + 32;
+					else
+						qianwei = temp[0];
+					if (temp[1] <= 90 && temp[1] >= 65)
+						baiwei = temp[1] + 32;
+					else
+						baiwei = temp[1];
+					if (temp[2] <= 90 && temp[2] >= 65)
+						shiwei = temp[2] + 32;
+					else
+						shiwei = temp[2];
+					if (temp[3] <= 90 && temp[3] >= 65)
+						gewei = temp[3] + 32;
+					else
+						gewei = temp[3];
+					//printf("temp is %s \n", temp);
+					data = (qianwei - 97) * 17576 + (baiwei - 97) * 676 + (shiwei - 97) * 26 + gewei - 97;
+					//printf("data is %d\n", data);
+					wordlength = i;
+					findornot = find_data_in_hash(pHashTbl, data, wordlength, temp, smallword, 0);
+					if (findornot == -1)
+						printf("hash is empty");
+					//else
+					//printf("get out of find function\n");
+					for (j = 0; j < word; j++)
+						temp[j] = '\0';
+					i = 0;
+				}
+			}
+		}
+
+	}
+	if (i >= 4)
+	{
+		//printf("lost temp");
+		if (temp[0] <= 90 && temp[0] >= 65)
+			qianwei = temp[0] + 32;
+		else
+			qianwei = temp[0];
+		if (temp[1] <= 90 && temp[1] >= 65)
+			baiwei = temp[1] + 32;
+		else
+			baiwei = temp[1];
+		if (temp[2] <= 90 && temp[2] >= 65)
+			shiwei = temp[2] + 32;
+		else
+			shiwei = temp[2];
+		if (temp[3] <= 90 && temp[3] >= 65)
+			gewei = temp[3] + 32;
+		else
+			gewei = temp[3];
+		//printf("temp is %s \n", temp);
+		data = (qianwei - 97) * 17576 + (baiwei - 97) * 676 + (shiwei - 97) * 26 + gewei - 97;
+		//printf("data is %d\n", data);
+		wordlength = i;
+		findornot = find_data_in_hash(pHashTbl, data, wordlength, temp, smallword, 0);
+		if (findornot == -1)
+			printf("hash is empty");
+		//else
+		//printf("get out of find function\n");
+		for (j = 0; j < word; j++)
+			temp[j] = '\0';
+	}
+
+
+	return charnumber;
+}
+
+
+int count_group(FILE*fp, HASH_TABLE*pHashTbl_group) {
+	char  ch, temp[word] = { 0 }, record[word] = { 0 }, smallword[word] = { 0 }, group[word] = { 0 };
+
+	int charnumber = 0, i = 0, j = 0, flag = 0, shiwei = 0, gewei = 0, data = 0, wordlength = 0, findornot, baiwei = 0;
+	charnumber = 0;
+	int qianwei = 0, qianwei_group = 0;
+	int record_long = 0, key = 0, baiwei_group = 0, shiwei_group = 0, gewei_group = 0, flag_group = 0, data_record = 0;
+
+	while (!feof(fp))
+	{
+
+		ch = fgetc(fp);
+		if (ch <= 127 && ch >0)
+		{
+			if ((ch >= 48 && ch <= 57) || (ch >= 97 && ch <= 122) || (ch >= 65 && ch <= 90))
+			{
+				temp[i++] = ch;
+
+			}
+			else
+			{
+
+				if (i<4 || (temp[0] <= 57 && temp[0] >= 48) || (temp[1] <= 57 && temp[1] >= 48) || (temp[2] <= 57 && temp[2] >= 48) || (temp[3] <= 57 && temp[3] >= 48))
+				{
+					for (j = 0; j < word; j++)
+						temp[j] = '\0';
+					i = 0;
+				}
+				else {
+					if (temp[0] <= 90 && temp[0] >= 65)
+						qianwei = temp[0] + 32;
+					else
+						qianwei = temp[0];
+					if (temp[1] <= 90 && temp[1] >= 65)
+						baiwei = temp[1] + 32;
+					else
+						baiwei = temp[1];
+					if (temp[2] <= 90 && temp[2] >= 65)
+						shiwei = temp[2] + 32;
+					else
+						shiwei = temp[2];
+					if (temp[3] <= 90 && temp[3] >= 65)
+						gewei = temp[3] + 32;
+					else
+						gewei = temp[3];
+					//printf("temp is %s \n", temp);
+					data = (qianwei - 97) * 17576 + (baiwei - 97) * 676 + (shiwei - 97) * 26 + gewei - 97;
+
+					//printf("data is %d\n", data);
+					wordlength = i;
+					findornot = find_data_in_hash(pHashTbl, data, wordlength, temp, smallword, 1);
+					if (findornot == 2)
+						strcpy_s(temp, smallword);
+					if (flag_group == 0) {
+
+						strcpy_s(record, temp);
+
+					}
+
+
+					//if (findornot == -1)
+					//printf("hash is empty");
+					//else
+					//printf("get out of find function and findornot is %d\n", findornot);
+					else {
+						//if (findornot == 2)
+						//strcpy_s(temp, smallword);
+						if (record[0] <= 90 && record[0] >= 65)
+							qianwei_group = record[0] + 32;
+						else
+							qianwei_group = record[0];
+						if (record[1] <= 90 && record[1] >= 65)
+							baiwei_group = record[1] + 32;
+						else
+							baiwei_group = record[1];
+						if (temp[0] <= 90 && temp[0] >= 65)
+							shiwei_group = temp[0] + 32;
+						else
+							shiwei_group = temp[0];
+						if (temp[1] <= 90 && temp[1] >= 65)
+							gewei_group = temp[1] + 32;
+						else
+							gewei_group = temp[1];
+						key = (qianwei_group - 97) * 17576 + (baiwei_group - 97) * 676 + (shiwei_group - 97) * 26 + gewei_group - 97;
+						//printf("record is now %s  temp is now %s small word is now %s\n", record, temp, smallword);
+						strcpy_s(group, record);
+						strcat_s(group, " ");
+						strcat_s(group, temp);
+						//printf("group is %s\n", group);
+						findgroup(pHashTbl_group, key, group);
+						strcpy_s(record, temp);
+
+						for (j = 0; j < word; j++)
+							smallword[j] = '\0';
+					}
+					for (j = 0; j < word; j++)
+						temp[j] = '\0';
+					i = 0;
+
+					flag_group++;
+				}
+			}
+		}
+
+	}
+	if (i >= 4)
+	{
+		//printf("lost temp");
+		if (temp[0] <= 90 && temp[0] >= 65)
+			qianwei = temp[0] + 32;
+		else
+			qianwei = temp[0];
+		if (temp[1] <= 90 && temp[1] >= 65)
+			baiwei = temp[1] + 32;
+		else
+			baiwei = temp[1];
+		if (temp[2] <= 90 && temp[2] >= 65)
+			shiwei = temp[2] + 32;
+		else
+			shiwei = temp[2];
+		if (temp[3] <= 90 && temp[3] >= 65)
+			gewei = temp[3] + 32;
+		else
+			gewei = temp[3];
+		//printf("temp is %s \n", temp);
+		data = (qianwei - 97) * 17576 + (baiwei - 97) * 676 + (shiwei - 97) * 26 + gewei - 97;
+
+		//printf("data is %d\n", data);
+		wordlength = i;
+		findornot = find_data_in_hash(pHashTbl, data, wordlength, temp, smallword, 1);
+		if (findornot == -1)
+			printf("hash is empty");
+		//else
+		//printf("get out of find function\n");
+
+		if (flag_group != 0) {
+			if (findornot == 2)
+				strcpy_s(temp, smallword);
+			if (record[0] <= 90 && record[0] >= 65)
+				qianwei_group = record[0] + 32;
+			else
+				qianwei_group = record[0];
+			if (record[1] <= 90 && record[1] >= 65)
+				baiwei_group = record[1] + 32;
+			else
+				baiwei_group = record[1];
+			if (temp[0] <= 90 && temp[0] >= 65)
+				shiwei_group = temp[0] + 32;
+			else
+				shiwei_group = temp[0];
+			if (temp[1] <= 90 && temp[1] >= 65)
+				gewei_group = temp[1] + 32;
+			else
+				gewei_group = temp[1];
+			key = (qianwei_group - 97) * 17576 + (baiwei_group - 97) * 676 + (shiwei_group - 97) * 26 + gewei_group - 97;
+			//printf("record is now %s  temp is now %s small word is now %s\n", record, temp, smallword);
+			strcpy_s(group, record);
+			strcat_s(group, " ");
+			strcat_s(group, temp);
+			//printf("group is %s\n", group);
+			findgroup(pHashTbl_group, key, group);
+			strcpy_s(record, temp);
+
+		}
+		for (j = 0; j < word; j++)
+			temp[j] = '\0';
+	}
+
+
+	return flag_group;
+}
+int partition(int arr[], int low, int high) {
+	int key;
+	key = arr[low];
+
+	while (low<high) {
+		while (low <high && arr[high] >= key)
+			high--;
+		if (low<high)
+			arr[low++] = arr[high];
+		while (low<high && arr[low] <= key)
+			low++;
+		if (low<high)
+			arr[high--] = arr[low];
+	}
+	arr[low] = key;
+
+	return low;
+}
+
+
+void quick_sort(int arr[], int start, int end) {
+	int pos;
+
+	if (start<end) {
+		//printf("start quick sort\n");
+		pos = partition(arr, start, end);
+		quick_sort(arr, start, pos - 1);
+		quick_sort(arr, pos + 1, end);
+	}
+
+	return;
+}
+
+void printTOP10word(HASH_TABLE*pHashTbl, int frequency_value[], int k, FILE*fp_result) {
+
+	int j = 0, m = 0, i = 0, count = 0;
+	NODE * pNode = NULL;
+	char TOPword[word] = { 0 };
+	fprintf(fp_result, "top 10 words are :\n");
+
+	for (i = k; i > k - 11 && i >= 0 && count <= 10; i--)
+	{
+		for (j = 0; j < hash_size && count <= 10; j++) {
+			if (pHashTbl->value[j] != NULL) {
+				pNode = pHashTbl->value[j];
+				while (pNode != NULL) {
+					if (pNode->frequency == frequency_value[i]) {
+
+						if (count >= 10)
+							break;
+						else
+						{
+
+
+							strcpy_s(TOPword, pNode->danci);
+							printf(" %s  : %d\n\n", TOPword, frequency_value[i]);
+							fprintf(fp_result, " \n%s :  %d\n", TOPword, frequency_value[i]);
+							count++;
+						}
+
+					}
+					pNode = pNode->next;
+				}
+			}
+		}
+	}
+
+
+}
+
+void printTOP10group(HASH_TABLE*pHashTbl_group, int frequency_value[], int k, FILE*fp_result) {
+
+	int j = 0, m = 0, i = 0, count = 0;
+	NODE * pNode = NULL;
+	char TOPword[word] = { 0 };
+	fprintf(fp_result, "top 10 phrases are :\n");
+	for (i = k; i > k - 11 && i >= 0 && count <= 10; i--)
+	{
+		for (j = 0; j < hash_size; j++) {
+			if (pHashTbl_group->value[j] != NULL) {
+				pNode = pHashTbl_group->value[j];
+				while (pNode != NULL) {
+					if (pNode->frequency == frequency_value[i]) {
+
+						if (count >= 10)
+							break;
+						else
+						{
+
+
+							strcpy_s(TOPword, pNode->danci);
+							printf(" %s  : %d\n\n", TOPword, frequency_value[i]);
+							fprintf(fp_result, " \n%s :  %d\n", TOPword, frequency_value[i]);
+							count++;
+						}
+
+					}
+					pNode = pNode->next;
+				}
+			}
+		}
+	}
+
+
+}
+int main(int argc, char *argv[])
+{
+	errno_t err_fpopen, err_fp, err_result;
+	char dir[500] = { 0 };                           //要读取的初始路径
+	char buffer[100];                //用于存放当前目录路径
+	int i = 0, charnumber = 0, j = 0, m = 0, Fileornot = 0, k = 0, k_group = 0;    //用于循环
+	int frequecy[frequecy_count] = { 0 }, frequecy_group[frequecy_count] = { 0 };
+	int filenum = 0, total_charnumber = 0, total_word = 0, total_group = 0, groupnumber = 0;            //用于记录，filenumber变量会在WriteAllFile后变为-1
+	FILE *fp_dir, *fp_test, *fp_single, *fp_result, *fp_single2, *fp_test2, *fp_dir2;              //用于打开dir.txt，其中存放了文件夹下所有文件名字
+	char file_path[pathlong] = { 0 };                     //用于存放dir.txt中每一行所代表的文件路径
+	char file_path_new[pathlong] = { 0 };
+	char file_path_test[pathlong] = { 0 };
+	char TOPword[word] = { 0 }, TOPgroup[word] = { 0 };
+	pHashTbl = create_hash_table();
+	pHashTbl_group = create_hash_table();
+	NODE * nodeprint, *nodecount, *nodeprint_group;
+	//printf("%d", argc);
+	strcpy_s(dir, argv[1]);
+
+	Fileornot = FileSearch(dir);
+
+	if (Fileornot == -1) {                        //-1说明输入路径是一个文档而非文件夹
+
+		fp_single = fopen(dir, "r");
+		fp_single2 = fopen(dir, "r");
+		if (fp_single == NULL)
+			printf("fail to open the file\n");
+		else
+			printf("open success");
+		charnumber = count(fp_single, pHashTbl);
+		groupnumber = count_group(fp_single2, pHashTbl_group);
+		if (charnumber != 0)
+			linenumber++;
+		total_charnumber = charnumber;
+		printf("total char is %d  total line is%d ", charnumber, linenumber);
+		fclose(fp_single);
+		fclose(fp_single2);
+
+	}
+
+
+	else {
+		printf("Total files is %d\n\n", filenumber + 1);
+		filenum = filenumber + 1;
+
+		
+
+		for (i = 0; i < filenum; i++)
+		{
+            
+			printf("path: %s\n", data[i].dir);
+			fp_test = fopen(data[i].dir, "r+");                    
+
+			if (fp_test == NULL) {
+
+				printf("open file failed");
+
+
+			}
+
+			charnumber = count(fp_test, pHashTbl);
+
+			if (charnumber != 0)
+				linenumber++;
+			total_charnumber = total_charnumber + charnumber;
+
+
+			fclose(fp_test);
+			
+
+		}
+		//printf("\nfinal char number=%d  final line number=%d final word number=%d\n", total_charnumber, linenumber,wordnum);
+
+		//for (j = 0;word[j].app_count!=0; j++) {
+		//printf("file word : %s\n", word[j].content);
+		//}
+		//printf("likeword number is %d", wordnum);
+
+
+		for (i = 0; i < filenum; i++)
+		{
+			
+			printf("path: %s\n",data[i].dir);
+			fp_test2 = fopen(data[i].dir, "r+");                     //打开成功返回0
+
+			if (fp_test2 == NULL) {
+
+				printf("open file failed");
+
+
+			}
+
+
+			groupnumber = count_group(fp_test2, pHashTbl_group);
+
+
+			fclose(fp_test2);
+			
+
+		}
+
+
+	}
+
+	for (j = 0; j < hash_size; j++) {
+		if (pHashTbl->value[j] != NULL)
+		{
+			nodeprint = pHashTbl->value[j];
+			while (nodeprint != NULL)
+			{
+
+				//printf("we have word %s conut is %d\n", nodeprint->danci, nodeprint->frequency);
+				total_word = total_word + nodeprint->frequency;
+				nodeprint = nodeprint->next;
+			}
+
+		}
+
+	}
+
+	for (j = 0; j < hash_size; j++) {
+		if (pHashTbl->value[j] != NULL) {
+			nodecount = pHashTbl->value[j];
+			while (nodecount != NULL) {
+				for (m = 0; m < frequecy_count; m++)
+					if (nodecount->frequency == frequecy[m])
+						break;
+				if (m == frequecy_count)
+					frequecy[k++] = nodecount->frequency;
+				nodecount = nodecount->next;
+			}
+		}
+	}
+
+
+	//for (m = 0; m < k; m++)
+	//printf("frequecy is %d \n ", frequecy[m]);
+	quick_sort(frequecy, 0, k - 1);
+	//printf("how many frequecy? %d\n", k);
+	//for (m = 0; m < k; m++)
+	//printf("frequecy is %d \n ", frequecy[m]);
+
+	for (j = 0; j < hash_size; j++) {
+		if (pHashTbl_group->value[j] != NULL) {
+			nodeprint_group = pHashTbl_group->value[j];
+			while (nodeprint_group != NULL) {
+				for (m = 0; m < frequecy_count; m++)
+					if (nodeprint_group->frequency == frequecy_group[m])
+						break;
+				if (m == frequecy_count)
+					frequecy_group[k_group++] = nodeprint_group->frequency;
+				nodeprint_group = nodeprint_group->next;
+			}
+		}
+	}
+	quick_sort(frequecy_group, 0, k_group - 1);
+	err_result = fopen_s(&fp_result, "result.txt", "w");
+	if (err_result != 0)
+		printf("open result.txt failed\n");
+	fprintf(fp_result, "char_number :%d\n", total_charnumber);
+	fprintf(fp_result, "line_number :%d\n", linenumber);
+	fprintf(fp_result, "word_number :%d\n", total_word);
+	//fprintf(fp_result, "phrase_number :%d\n", total_group);
+	printf("top 10 words are:\n");
+
+
+
+	printTOP10word(pHashTbl, frequecy, k, fp_result);
+
+
+	printf("top 10 phrases are:\n");
+
+
+
+	printTOP10group(pHashTbl_group, frequecy_group, k_group, fp_result);
+
+
+	fclose(fp_result);
+
+
+	/*
+	for (j = 0; j < 17576; j++) {
+	if (pHashTbl_group->value[j] != NULL)
+	{
+	nodeprint_group = pHashTbl_group->value[j];
+	while (nodeprint_group != NULL)
+	{
+
+	printf("we have group %s conut is %d\n", nodeprint_group->danci, nodeprint_group->frequency);
+	total_group = total_group + nodeprint_group->frequency;
+	nodeprint_group = nodeprint_group->next;
+	}
+
+	}
+	}*/
+
+
+
+
+	printf("total char is %d,line number is %d total word is %d\n\n", total_charnumber, linenumber, total_word);
+
+
+	
+	return 0;
+}
+
